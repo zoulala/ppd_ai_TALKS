@@ -1,5 +1,5 @@
 import tensorflow as tf
-from read_utils import TextConverter, batch_generator
+from read_utils import TextConverter, batch_generator,samples_clearn,val_samples_generator
 from model import DualBiLSTM
 import os
 import argparse  # 用于分析输入的超参数
@@ -37,6 +37,7 @@ args_in = '--name thoth ' \
           '--num_steps 20 ' \
           '--num_seqs 32 ' \
           '--learning_rate 0.001 ' \
+          '--use_embedding Ture ' \
           '--lstm_size 128 ' \
           '--max_steps 20000'.split()
 
@@ -52,8 +53,14 @@ def main(_):
 
     data_path,save_path = 'data','process_data'
     converter = TextConverter(data_path, save_path, FLAGS.num_steps)
+    embeddings = converter.embeddings
     samples = converter.load_obj(os.path.join(save_path, 'train_word.pkl'))
+    # samples = samples_clearn(samples)
     g = batch_generator(samples, FLAGS.num_seqs)
+
+    val_samples = converter.load_obj(os.path.join(save_path, 'val_word.pkl'))
+    val_g = val_samples_generator(val_samples)
+
     print(FLAGS.use_embedding)
     print(converter.vocab_size)
     model = DualBiLSTM(converter.vocab_size,
@@ -64,13 +71,15 @@ def main(_):
                      learning_rate=FLAGS.learning_rate,
                      train_keep_prob=FLAGS.train_keep_prob,
                      use_embedding=FLAGS.use_embedding,
-                     embedding_size=FLAGS.embedding_size
+                     embedding_size=FLAGS.embedding_size,
+                     embeddings=embeddings
                      )
     model.train(g,
                 FLAGS.max_steps,
                 model_path,
                 FLAGS.save_every_n,
                 FLAGS.log_every_n,
+                val_g
                 )
 
 

@@ -11,7 +11,7 @@ class DualBiLSTM():
     '''
     def __init__(self, num_classes, batch_size=64, num_steps=50,
                  lstm_size=128, num_layers=2, learning_rate=0.001,
-                 grad_clip=5, test=False, train_keep_prob=0.5, use_embedding=False, embedding_size=300):
+                 grad_clip=5, test=False, train_keep_prob=0.5, use_embedding=False, embedding_size=300, embeddings=None):
         # if test is True:
         #     batch_size = 1
 
@@ -25,6 +25,7 @@ class DualBiLSTM():
         self.train_keep_prob = train_keep_prob  # 训练以一定概率进行
         self.use_embedding = use_embedding
         self.embedding_size = embedding_size  # 嵌入词向量大小，即输入节点个数
+        self.embeddings = embeddings
 
 
         tf.reset_default_graph()
@@ -45,7 +46,7 @@ class DualBiLSTM():
             self.response_length = tf.placeholder(tf.int32, [None], name='response_length')
 
             # self.inputs = tf.placeholder(tf.int32, shape=(self.batch_size, self.num_steps),name='inputs')
-            self.targets = tf.placeholder(tf.int32, shape=[self.batch_size], name='targets')
+            self.targets = tf.placeholder(tf.int32, shape=[None], name='targets')
             self.keep_prob = tf.placeholder(tf.float32, name='keep_prob')
 
             # 词嵌入层
@@ -54,7 +55,8 @@ class DualBiLSTM():
                 self.lstm_response_seqs = tf.one_hot(self.response_seqs, depth=self.num_classes)
             else:
                 with tf.device("/cpu:0"):
-                    embedding = tf.get_variable('embedding', [self.num_classes, self.embedding_size])
+                    embedding = tf.Variable(tf.to_float(self.embeddings), trainable=True, name="embedding")
+                    # embedding = tf.get_variable('embedding', [self.num_classes, self.embedding_size])
                     self.lstm_query_seqs = tf.nn.embedding_lookup(embedding, self.query_seqs)  # 词嵌入[1,2,3] --> [[3,...,4],[0.7,...,-3],[6,...,9]],embeding[depth*embedding_size]=[[0.2,...,6],[3,...,4],[0.7,...,-3],[6,...,9],[8,...,-0.7]]，此时的输入节点个数为embedding_size
                     self.lstm_response_seqs = tf.nn.embedding_lookup(embedding, self.response_seqs)
 
@@ -100,16 +102,29 @@ class DualBiLSTM():
                                       initializer=tf.truncated_normal_initializer())
 
         # 训练阶段, 使用batch内其他样本的response作为negative response
-        self.response_matul_state = tf.matmul(self.response_h_state, self.W)
-        self.logits = tf.matmul(a=self.query_h_state, b=self.response_matul_state, transpose_b=True)
+        # self.response_matul_state = tf.matmul(self.response_h_state, self.W)
+        # self.logits = tf.matmul(a=self.query_h_state, b=self.response_matul_state, transpose_b=True)
         # self.diag_logits = tf.diag_part(self.logits)  # 获取对角线元素
+
+        self.logits = self.get_cosine_similarity(self.query_h_state,self.response_h_state)
+
+    @staticmethod
+    def get_cosine_similarity(q, a):
+        q1 = tf.sqrt(tf.reduce_sum(tf.multiply(q, q), 1))
+        a1 = tf.sqrt(tf.reduce_sum(tf.multiply(a, a), 1))
+        mul = tf.reduce_sum(tf.multiply(q, a), 1)
+        cosSim = tf.div(mul, tf.multiply(q1, a1))
+        return cosSim
+
 
     def build_loss(self):
         with tf.name_scope('loss'):
-            self.diag_targets = tf.matrix_diag(self.targets)  # 生成对角矩阵
+            # self.diag_targets = tf.matrix_diag(self.targets)  # 生成对角矩阵
             # self.losses = tf.losses.softmax_cross_entropy(onehot_labels=self.diag_targets, logits=self.logits)
-            self.losses = tf.nn.softmax_cross_entropy_with_logits(logits=self.logits, labels=self.diag_targets)
+            self.losses = tf.nn.softmax_cross_entropy_with_logits(logits=self.logits, labels=self.targets)
             self.mean_loss = tf.reduce_mean(self.losses, name="mean_loss")  # batch样本的平均损失
+
+            # self.mean_loss = self.get_cosine_similarity(self.logits, self.targets)
 
 
     def build_optimizer(self):
@@ -119,7 +134,9 @@ class DualBiLSTM():
         train_op = tf.train.AdamOptimizer(self.learning_rate)
         self.optimizer = train_op.apply_gradients(zip(grads, tvars))
 
-    def train(self, batch_generator, max_steps, save_path, save_every_n, log_every_n):
+        # self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.mean_loss)
+
+    def train(self, batch_generator, max_steps, save_path, save_every_n, log_every_n, val_g):
         self.session = tf.Session()
         with self.session as sess:
             sess.run(tf.global_variables_initializer())
@@ -135,7 +152,7 @@ class DualBiLSTM():
                         self.response_length: r_len,
                         self.targets: y,
                         self.keep_prob: self.train_keep_prob}
-                batch_loss,losses, _ = sess.run([self.mean_loss,self.losses, self.optimizer], feed_dict=feed)
+                batch_loss, _ ,logits= sess.run([self.mean_loss, self.optimizer,self.logits], feed_dict=feed)
                 end = time.time()
 
                 # control the print lines
@@ -146,6 +163,22 @@ class DualBiLSTM():
                     # print(losses)
                 if (step % save_every_n == 0):
                     self.saver.save(sess, os.path.join(save_path, 'model'), global_step=step)
+
+                    q, q_len, r, r_len, y = val_g
+                    feed = {self.query_seqs: q,
+                            self.query_length: q_len,
+                            self.response_seqs: r,
+                            self.response_length: r_len,
+                            self.targets: y,
+                            self.keep_prob: self.train_keep_prob}
+                    batch_loss,  logits = sess.run(
+                        [self.mean_loss,  self.logits], feed_dict=feed)
+                    from sklearn.metrics import log_loss
+                    print(logits[:30])
+                    print(y[:30])
+                    logloss = log_loss(y, logits, eps=1e-15)
+                    print('logloss:',logloss)
+
                 if step >= max_steps:
                     break
             # self.saver.save(sess, os.path.join(save_path, 'model'), global_step=step)
@@ -161,3 +194,77 @@ class DualBiLSTM():
                     self.keep_prob: 1.}
             logits = sess.run(tf.nn.softmax(self.logits), feed_dict=feed)
             print('概率：', logits)
+
+
+
+from gensim import matutils
+class WordVec():
+
+    def __init__(self,embeddings):
+        self.embeddings = embeddings
+
+    def sens_to_embed(self,query_seqs):
+
+        embed_query_seqs = tf.nn.embedding_lookup(self.embeddings, query_seqs)
+        with tf.Session() as sess:
+            embed_query_seqs = sess.run(embed_query_seqs)
+            embed_query_seqs = embed_query_seqs.sum(axis=1)
+
+            for i in range(embed_query_seqs.shape[0]):
+                embed_query_seqs[i] = matutils.unitvec(embed_query_seqs[i])  # 单位圆化：模为1
+        return embed_query_seqs
+
+
+
+
+
+if __name__=="__main__":
+
+    from sklearn.metrics import log_loss
+
+    logloss = log_loss([0,1,1,1,1], [-0.18919963, 0.31782416, 1, 0.5340115, 0.21335456], eps=1e-15)
+    print('logloss:', logloss)
+
+    from read_utils import TextConverter,val_samples_generator
+
+    data_path,save_path = 'data','process_data'
+    converter = TextConverter(data_path, save_path, 20)
+    embeddings = converter.embeddings
+    ww = WordVec(embeddings)
+
+
+
+    val_samples = converter.load_obj(os.path.join(save_path, 'train_word.pkl'))
+    val_g = val_samples_generator(val_samples[40000:80000])
+
+    q_val,q_len,r_val,r_len,y = val_g
+
+    embed_query_seqs = ww.sens_to_embed(q_val)
+    embed_respones_seqs = ww.sens_to_embed(r_val)
+
+    assert embed_query_seqs.shape[0]==embed_respones_seqs.shape[0],'not equal'
+
+    n = embed_query_seqs.shape[0]
+
+    print('start dot.')
+    y_pre = []
+    for i in range(n):
+        nd = np.dot(embed_query_seqs[i], embed_respones_seqs[i])
+
+        if nd > 0.9999999:
+            nd = 1.0
+
+        nd = (nd+1)/2
+        y_pre.append(nd)
+
+
+
+    logloss = log_loss([0,1,1,1,1], [-0.18919963, 0.31782416, 1.1, 0.5340115, 0.21335456], eps=1e-15)
+    print('logloss:', logloss)
+
+    logloss = log_loss(y, y_pre, eps=1e-15)
+    print('logloss:', logloss)
+
+
+
+

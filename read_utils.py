@@ -8,6 +8,29 @@ import itertools
 import pickle
 import random
 
+def samples_clearn(samples):
+    cl_samples = [sample for sample in samples if sample[4]==1]
+    return cl_samples
+
+def val_samples_generator(samples):
+    batch_q = []
+    batch_q_len = []
+    batch_r = []
+    batch_r_len = []
+    batch_y = []
+    for sample in samples:
+        batch_q.append(sample[0])
+        batch_q_len.append(sample[1])
+        batch_r.append(sample[2])
+        batch_r_len.append(sample[3])
+        batch_y.append(sample[4])
+
+    batch_q = np.array(batch_q)
+    batch_q_len = np.array(batch_q_len)
+    batch_r = np.array(batch_r)
+    batch_r_len = np.array(batch_r_len)
+    batch_y = np.array(batch_y)
+    return batch_q,batch_q_len,batch_r,batch_r_len,batch_y
 
 def batch_generator(samples, batchsize):
     '''产生训练batch样本'''
@@ -43,8 +66,8 @@ class TextConverter():
         if os.path.exists(os.path.join(save_path, 'train_word.pkl')) is False:
             self.initialize(data_path, save_path)
 
-        self.embedding = self.load_embedding(os.path.join(save_path, 'word_embed.npy'))
-        self.vocab_size = self.embedding.shape[0]
+        self.embeddings = self.load_embedding(os.path.join(save_path, 'word_embed.npy'))
+        self.vocab_size = self.embeddings.shape[0]
 
     def initialize(self,data_path, save_path):
         ori_train_csv = pd.read_csv(os.path.join(data_path, 'train.csv'))
