@@ -55,10 +55,10 @@ class DualBiLSTM():
                 self.lstm_response_seqs = tf.one_hot(self.response_seqs, depth=self.num_classes)
             else:
                 with tf.device("/cpu:0"):
-                    embedding = tf.Variable(tf.to_float(self.embeddings), trainable=True, name="embedding")
+                    self.embedding = tf.Variable(tf.to_float(self.embeddings), trainable=True, name="embedding")
                     # embedding = tf.get_variable('embedding', [self.num_classes, self.embedding_size])
-                    self.lstm_query_seqs = tf.nn.embedding_lookup(embedding, self.query_seqs)  # 词嵌入[1,2,3] --> [[3,...,4],[0.7,...,-3],[6,...,9]],embeding[depth*embedding_size]=[[0.2,...,6],[3,...,4],[0.7,...,-3],[6,...,9],[8,...,-0.7]]，此时的输入节点个数为embedding_size
-                    self.lstm_response_seqs = tf.nn.embedding_lookup(embedding, self.response_seqs)
+                    self.lstm_query_seqs = tf.nn.embedding_lookup(self.embedding, self.query_seqs)  # 词嵌入[1,2,3] --> [[3,...,4],[0.7,...,-3],[6,...,9]],embeding[depth*embedding_size]=[[0.2,...,6],[3,...,4],[0.7,...,-3],[6,...,9],[8,...,-0.7]]，此时的输入节点个数为embedding_size
+                    self.lstm_response_seqs = tf.nn.embedding_lookup(self.embedding, self.response_seqs)
 
     def build_lstm(self):
 
@@ -257,10 +257,6 @@ if __name__=="__main__":
         nd = (nd+1)/2
         y_pre.append(nd)
 
-
-
-    logloss = log_loss([0,1,1,1,1], [-0.18919963, 0.31782416, 1.1, 0.5340115, 0.21335456], eps=1e-15)
-    print('logloss:', logloss)
 
     logloss = log_loss(y, y_pre, eps=1e-15)
     print('logloss:', logloss)
