@@ -55,10 +55,10 @@ class DualBiLSTM():
                 self.lstm_response_seqs = tf.one_hot(self.response_seqs, depth=self.num_classes)
             else:
                 with tf.device("/cpu:0"):
-                    self.embedding = tf.Variable(tf.to_float(self.embeddings), trainable=True, name="embedding")
+                    embedding = tf.Variable(tf.to_float(self.embeddings), trainable=True, name="embedding")
                     # embedding = tf.get_variable('embedding', [self.num_classes, self.embedding_size])
-                    self.lstm_query_seqs = tf.nn.embedding_lookup(self.embedding, self.query_seqs)  # 词嵌入[1,2,3] --> [[3,...,4],[0.7,...,-3],[6,...,9]],embeding[depth*embedding_size]=[[0.2,...,6],[3,...,4],[0.7,...,-3],[6,...,9],[8,...,-0.7]]，此时的输入节点个数为embedding_size
-                    self.lstm_response_seqs = tf.nn.embedding_lookup(self.embedding, self.response_seqs)
+                    self.lstm_query_seqs = tf.nn.embedding_lookup(embedding, self.query_seqs)  # 词嵌入[1,2,3] --> [[3,...,4],[0.7,...,-3],[6,...,9]],embeding[depth*embedding_size]=[[0.2,...,6],[3,...,4],[0.7,...,-3],[6,...,9],[8,...,-0.7]]，此时的输入节点个数为embedding_size
+                    self.lstm_response_seqs = tf.nn.embedding_lookup(embedding, self.response_seqs)
 
     def build_lstm(self):
 
@@ -222,7 +222,7 @@ if __name__=="__main__":
 
     from sklearn.metrics import log_loss
 
-    logloss = log_loss([0,1,1,1,1], [-0.18919963, 0.31782416, 1, 0.5340115, 0.21335456], eps=1e-15)
+    logloss = log_loss([0,1,1,1,1], [0, 1, 1, 1, 1], eps=1e-15)
     print('logloss:', logloss)
 
     from read_utils import TextConverter,val_samples_generator
@@ -255,7 +255,22 @@ if __name__=="__main__":
             nd = 1.0
 
         nd = (nd+1)/2
-        y_pre.append(nd)
+
+        if nd>0.65:
+            y_pre.append(1)
+        else:
+            y_pre.append(0)
+        # y_pre.append(nd)
+
+
+
+    if len(y) == len(y_pre):
+
+        # 计算预测准确率（百分比）
+        print( "Predictions have an accuracy of {:.2f}%.".format((y == np.array(y_pre)).mean() * 100))
+
+    else:
+        print( "Number of predictions does not match number of outcomes!")
 
 
     logloss = log_loss(y, y_pre, eps=1e-15)

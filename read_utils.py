@@ -32,6 +32,24 @@ def val_samples_generator(samples):
     batch_y = np.array(batch_y)
     return batch_q,batch_q_len,batch_r,batch_r_len,batch_y
 
+def test_samples_generator(samples):
+    batch_q = []
+    batch_q_len = []
+    batch_r = []
+    batch_r_len = []
+    for sample in samples:
+        batch_q.append(sample[0])
+        batch_q_len.append(sample[1])
+        batch_r.append(sample[2])
+        batch_r_len.append(sample[3])
+
+    batch_q = np.array(batch_q)
+    batch_q_len = np.array(batch_q_len)
+    batch_r = np.array(batch_r)
+    batch_r_len = np.array(batch_r_len)
+
+    return batch_q,batch_q_len,batch_r,batch_r_len
+
 def batch_generator(samples, batchsize):
     '''产生训练batch样本'''
     n_samples = len(samples)
