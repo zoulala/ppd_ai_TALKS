@@ -79,12 +79,21 @@ def batch_generator(samples, batchsize):
             yield batch_q,batch_q_len,batch_r,batch_r_len,batch_y
 
 class TextConverter():
-    def __init__(self,data_path, save_path, max_steps=20):
+    def __init__(self,word_char, data_path, save_path,  max_steps=20):
         self.max_steps = max_steps
-        if os.path.exists(os.path.join(save_path, 'train_word.pkl')) is False:
-            self.initialize(data_path, save_path)
+        self.word_char = word_char
 
-        self.embeddings = self.load_embedding(os.path.join(save_path, 'word_embed.npy'))
+        if self.word_char == 'word':
+            if os.path.exists(os.path.join(save_path, 'train_word.pkl')) is False:
+                self.initialize(data_path, save_path)
+            self.embeddings = self.load_embedding(os.path.join(save_path, 'word_embed.npy'))
+        elif self.word_char == 'char':
+            if os.path.exists(os.path.join(save_path, 'train_char.pkl')) is False:
+                self.initialize(data_path, save_path)
+            self.embeddings = self.load_embedding(os.path.join(save_path, 'char_embed.npy'))
+        else:
+            raise Exception("Invalid value!", self.word_char)
+
         self.vocab_size = self.embeddings.shape[0]
 
     def initialize(self,data_path, save_path):
@@ -94,8 +103,6 @@ class TextConverter():
         self.val_csv = ori_train_csv[thres:]
         self.test_csv = pd.read_csv(os.path.join(data_path, 'test.csv'))
 
-        self.embed_to_val(os.path.join(data_path, 'word_embed.txt'),os.path.join(save_path, 'word_embed.npy'))
-
         self.question_to_cleaned(os.path.join(data_path, 'question.csv'),os.path.join(data_path, 'question_cleaned.csv'))
         self.q2w, self.q2c = self.fn(os.path.join(data_path, 'question_cleaned.csv'))
         assert len(self.q2w) == len(self.q2c), "len(q2w): %d, len(q2c): %d" % (len(self.q2w), len(self.q2c))
@@ -103,10 +110,18 @@ class TextConverter():
         self.save_obj(self.q2w, os.path.join(save_path, 'q2w.pkl'))
         self.save_obj(self.q2c, os.path.join(save_path, 'q2c.pkl'))
 
+        if self.word_char == 'word':
+            self.embed_to_val(os.path.join(data_path, 'word_embed.txt'),os.path.join(save_path, 'word_embed.npy'))
+            self.train_fn(self.train_csv, os.path.join(save_path, 'train_word.pkl'))
+            self.test_fn(self.test_csv, os.path.join(save_path, 'test_word.pkl'))
+            self.train_fn(self.val_csv, os.path.join(save_path, 'val_word.pkl'))
 
-        self.train_fn(self.train_csv, os.path.join(save_path, 'train_word.pkl'))
-        self.test_fn(self.test_csv, os.path.join(save_path, 'test_word.pkl'))
-        self.train_fn(self.val_csv, os.path.join(save_path, 'val_word.pkl'))
+        if self.word_char == 'char':
+            self.embed_to_val(os.path.join(data_path, 'char_embed.txt'),os.path.join(save_path, 'char_embed.npy'))
+            self.train_fn(self.train_csv, os.path.join(save_path, 'train_char.pkl'))
+            self.test_fn(self.test_csv, os.path.join(save_path, 'test_char.pkl'))
+            self.train_fn(self.val_csv, os.path.join(save_path, 'val_char.pkl'))
+
 
     def glance(self,d, n=1):
         return dict(itertools.islice(d.items(), 1))
@@ -184,8 +199,13 @@ class TextConverter():
             q1_id_int, q2_id_int = [self.PAD_INT] * self.max_steps, [self.PAD_INT] * self.max_steps
 
             label, q1_id, q2_id = arr_line
-            q1_len = self.fn1(self.q2w[q1_id], q1_id_int)
-            q2_len = self.fn1(self.q2w[q2_id], q2_id_int)
+            if self.word_char == 'word':
+                q1_len = self.fn1(self.q2w[q1_id], q1_id_int)
+                q2_len = self.fn1(self.q2w[q2_id], q2_id_int)
+            if self.word_char == 'char':
+                q1_len = self.fn1(self.q2c[q1_id], q1_id_int)
+                q2_len = self.fn1(self.q2c[q2_id], q2_id_int)
+
             samples.append((q1_id_int,q1_len,q2_id_int,q2_len,label))
         self.save_obj(samples, path)
 
@@ -195,8 +215,13 @@ class TextConverter():
             q1_id_int, q2_id_int = [self.PAD_INT] * self.max_steps, [self.PAD_INT] * self.max_steps
 
             q1_id, q2_id = arr_line
-            q1_len = self.fn1(self.q2w[q1_id], q1_id_int)
-            q2_len = self.fn1(self.q2w[q2_id], q2_id_int)
+            if self.word_char == 'word':
+                q1_len = self.fn1(self.q2w[q1_id], q1_id_int)
+                q2_len = self.fn1(self.q2w[q2_id], q2_id_int)
+            if self.word_char == 'char':
+                q1_len = self.fn1(self.q2c[q1_id], q1_id_int)
+                q2_len = self.fn1(self.q2c[q2_id], q2_id_int)
+
             samples.append((q1_id_int, q1_len, q2_id_int, q2_len))
         self.save_obj(samples, path)
 

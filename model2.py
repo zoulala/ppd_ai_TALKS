@@ -7,6 +7,9 @@ import os
 
 
 class Model(object):
+    '''seg_word ---> bilstm --> output--> maxpooling -->  h*w+b --> h*w+b -->([0,1])
+    result:0.635849
+    '''
     def __init__(self, num_classes, config, test=False, embeddings=None):
         self.num_classes = num_classes
         self.config = config
@@ -65,6 +68,7 @@ class Model(object):
         self.keep_prob = tf.placeholder(dtype=tf.float32, shape=[], name="dropout")
         self.lr = tf.placeholder(dtype=tf.float32, shape=[], name="lr")
         self.global_step = tf.Variable(0, trainable=False, name="global_step")
+        self.global_loss = tf.Variable(1, dtype=tf.float32,trainable=False, name="global_loss")
 
         ### Embedding
         if self.config.use_embedding is False:
@@ -93,7 +97,7 @@ class Model(object):
         lstm2_pool = max_pool(lstm2)
 
         ### Features
-        flat1 = tf.contrib.layers.flatten(lstm1_pool)  #作用：flattened = tf.reshape(x, [tf.shape(x)[0], -1])，最终维度是2:[batch,n]
+        flat1 = tf.contrib.layers.flatten(lstm1_pool)  #作用reshape：flattened = tf.reshape(x, [tf.shape(x)[0], -1])，最终维度是2:[batch,n]
         flat2 = tf.contrib.layers.flatten(lstm2_pool)
         mult = tf.multiply(flat1, flat2)
         diff = tf.abs(tf.subtract(flat1, flat2))
@@ -161,11 +165,6 @@ class Model(object):
         # correct_prediction_inf = tf.equal(tf.argmax(self.fc2, 1), self.y)
         # self.accuracy_inf = tf.reduce_mean(tf.cast(correct_prediction_inf, tf.float32))
         #
-        # ### Summaries
-        # with tf.variable_scope("summaries") as scope:
-        #     pass
-
-
 
     def train(self, batch_generator, max_steps, save_path, save_every_n, log_every_n, val_g):
 
@@ -191,7 +190,7 @@ class Model(object):
                           '{:.4f} sec/batch'.format((end - start)))
 
                 if (self.global_step.eval() % save_every_n == 0):
-                    self.saver.save(sess, os.path.join(save_path, 'model'), global_step=self.global_step)
+                    # self.saver.save(sess, os.path.join(save_path, 'model'), global_step=self.global_step)
 
                     q, q_len, r, r_len, y = val_g
                     feed = {self.q1: q,
@@ -211,36 +210,46 @@ class Model(object):
                         print("Number of predictions does not match number of outcomes!")
 
                     from sklearn.metrics import log_loss
+                    y_cos[y_cos == 1] = 0.999999
                     logloss = log_loss(y, y_cos, eps=1e-15)
                     print('logloss:',logloss)
+
+                    if logloss < self.global_loss.eval():
+                        update = tf.assign(self.global_loss, logloss)
+                        sess.run(update)
+                        self.saver.save(sess, os.path.join(save_path, 'model'), global_step=self.global_step)
+
+
 
                 if self.global_step.eval() >= max_steps:
                     break
             # self.saver.save(sess, os.path.join(save_path, 'model'), global_step=step)
 
 
-    def test(self, batch_generator ):
-        sess = self.session
-        q, q_len, r, r_len, y = batch_generator
-        feed = {self.q1: q,
-                self.l1: q_len,
-                self.q2: r,
-                self.l2: r_len,
-                self.y: y,
-                self.keep_prob: 1}
-        batch_loss, y_pre,y_cos = sess.run([self.losses, self.y_pre, self.y_cos], feed_dict=feed)
 
-        print(y_pre[:30])
-        print(y[:30])
-        if len(y) == len(y_pre):
-            # 计算预测准确率（百分比）
-            print("Predictions have an accuracy of {:.2f}%.".format((y == np.array(y_pre)).mean() * 100))
-        else:
-            print("Number of predictions does not match number of outcomes!")
+    def test(self, batch_generator,model_path ):
+        with self.session as sess:
+            q, q_len, r, r_len = batch_generator
+            feed = {self.q1: q,
+                    self.l1: q_len,
+                    self.q2: r,
+                    self.l2: r_len,
+                    self.keep_prob: 1}
+            y_pre,y_cos = sess.run([self.y_pre, self.y_cos], feed_dict=feed)
 
-        from sklearn.metrics import log_loss
-        logloss = log_loss(y, y_cos, eps=1e-15)
-        print('logloss:', logloss)
+            print(y_pre[:30])
+            print(y_cos[:30])
+
+            def make_submission(predict_prob):
+                with open(model_path+'/submission.csv', 'a+') as file:
+                    # file.write(str('y_pre') + '\n')
+                    for line in predict_prob:
+                        if line==1:
+                            line = 0.99999
+                        file.write(str(line) + '\n')
+                file.close()
+            make_submission(y_cos)
+            print('...............................................................')
 
     def load(self, checkpoint):
         self.saver.restore(self.session, checkpoint)

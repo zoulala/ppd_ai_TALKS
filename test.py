@@ -1,8 +1,24 @@
+# ref:https://github.com/hzy46/Char-RNN-TensorFlow
 import tensorflow as tf
-from read_utils import TextConverter, batch_generator,samples_clearn,val_samples_generator
+from read_utils import TextConverter,batch_generator,val_samples_generator,test_samples_generator
 import os
-import argparse  # 用于分析输入的超参数
 
+# FLAGS = tf.flags.FLAGS
+#
+# tf.flags.DEFINE_integer('lstm_size', 128, 'size of hidden state of lstm')
+# tf.flags.DEFINE_integer('num_layers', 2, 'number of lstm layers')
+# tf.flags.DEFINE_boolean('use_embedding', False, 'whether to use embedding')
+# tf.flags.DEFINE_integer('embedding_size', 128, 'size of embedding')
+# tf.flags.DEFINE_string('converter_path', '', 'model/name/converter.pkl')
+# tf.flags.DEFINE_string('checkpoint_path', '', 'checkpoint path')
+# tf.flags.DEFINE_string('start_string', '', 'use this string to start generating')
+# tf.flags.DEFINE_integer('max_length', 30, 'max length to generate')
+#
+
+
+
+
+import argparse # 用于分析输入的超参数
 
 def parseArgs(args):
     """
@@ -10,6 +26,7 @@ def parseArgs(args):
     Args:
         args (list<stir>): List of arguments.
     """
+
 
     parser = argparse.ArgumentParser()
     test_args = parser.add_argument_group('test超参数')
@@ -32,38 +49,31 @@ def parseArgs(args):
     test_args.add_argument('--feats', type=str, default='raw', help='features of query')
     test_args.add_argument('--batch_norm', type=bool, default=False, help='standardization')
     test_args.add_argument('--op_method', type=str, default='adam', help='method of optimizer')
-    test_args.add_argument('--checkpoint_path', type=str, default='models/thoth3/', help='checkpoint path')
-
-
+    test_args.add_argument('--checkpoint_path', type=str, default='', help='checkpoint path')
 
     return parser.parse_args(args)
 
-
-## thoth 问答
+## thoth
 args_in = '--file_name thoth4 ' \
           '--num_steps 20 ' \
-          '--batch_size 32 ' \
-          '--learning_rate 0.001 ' \
           '--use_embedding Ture ' \
-          '--hidden_size 128 ' \
-          '--fc_activation sigmoid ' \
-          '--op_method adam ' \
-          '--max_steps 200000'.split()
+          '--batch_size 32 '.split()
+
 
 FLAGS = parseArgs(args_in)
 
 
-
 def main(_):
-    word_char = 'char'  # 'word' or 'char'
-    print('use word or char:',word_char)
+    # # FLAGS.start_string = FLAGS.start_string#.decode('utf-8')
+    word_char = 'word'  # 'word' or 'char'
+    print('use word or char:', word_char)
 
-    FLAGS.file_name = word_char+'_'+FLAGS.file_name
-    print('model_path:',FLAGS.file_name)
+    FLAGS.file_name = word_char + '_' + FLAGS.file_name
+    print('model_path:', FLAGS.file_name)
 
     model_path = os.path.join('models', FLAGS.file_name)
-    if os.path.exists(model_path) is False:
-        os.makedirs(model_path)
+    if os.path.isdir(model_path):
+        FLAGS.checkpoint_path = tf.train.latest_checkpoint(model_path)
 
     if FLAGS.file_name[-1] == '2':
         from model2 import Model
@@ -76,44 +86,33 @@ def main(_):
     else:
         from model1 import Model
 
-    data_path,save_path = 'data','process_data'
+    data_path, save_path = 'data', 'process_data'
 
-    converter = TextConverter(word_char, data_path, save_path,  FLAGS.num_steps)
+    converter = TextConverter(word_char,data_path, save_path, FLAGS.num_steps)
     embeddings = converter.embeddings
 
     if word_char == 'word':
-        train_pkl = 'train_word.pkl'
-        val_pkl = 'val_word.pkl'
+        test_pkl = 'test_word.pkl'
     if word_char == 'char':
-        train_pkl = 'train_char.pkl'
-        val_pkl = 'val_char.pkl'
+        test_pkl = 'test_char.pkl'
 
-    train_samples = converter.load_obj(os.path.join(save_path, train_pkl))
-    train_g = batch_generator(train_samples, FLAGS.batch_size)
-
-    val_samples = converter.load_obj(os.path.join(save_path, val_pkl))
-    val_g = val_samples_generator(val_samples[:5000])
-
+    test_samples = converter.load_obj(os.path.join(save_path, test_pkl))
 
     print('use embeding:',FLAGS.use_embedding)
     print('vocab size:',converter.vocab_size)
 
+    with open(model_path+'/submission.csv', 'w') as file:
+        file.write(str('y_pre') + '\n')
+    for i in range(0,len(test_samples), 5000):  # 内存不足 分批test
+        print('>>>>:',i,'/',len(test_samples))
+        test_g = test_samples_generator(test_samples[i:i+5000])
 
-    model = Model(converter.vocab_size,FLAGS,test=False, embeddings=embeddings)
+        model = Model(converter.vocab_size, FLAGS, test=False, embeddings=embeddings)
 
-    # 继续上一次模型训练
-    FLAGS.checkpoint_path = tf.train.latest_checkpoint(model_path)
-    if FLAGS.checkpoint_path:
         model.load(FLAGS.checkpoint_path)
 
-    model.train(train_g,
-                FLAGS.max_steps,
-                model_path,
-                FLAGS.save_every_n,
-                FLAGS.log_every_n,
-                val_g
-                )
-
+        model.test(test_g, model_path)
+    print('finished!')
 
 if __name__ == '__main__':
     tf.app.run()
