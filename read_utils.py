@@ -56,7 +56,7 @@ def batch_generator(samples, batchsize):
     n_batches = int(n_samples/batchsize)
     n = n_batches * batchsize
     while True:
-        # random.shuffle(samples)  # 打乱顺序
+        random.shuffle(samples)  # 打乱顺序
         for i in range(0, n, batchsize):
             batch_samples = samples[i:i+batchsize]
             batch_q = []

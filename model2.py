@@ -66,7 +66,7 @@ class Model(object):
         self.y = tf.placeholder( tf.int64, shape=[None], name="is_duplicate")
 
         self.keep_prob = tf.placeholder(dtype=tf.float32, shape=[], name="dropout")
-        self.lr = tf.placeholder(dtype=tf.float32, shape=[], name="lr")
+        # self.lr = tf.placeholder(dtype=tf.float32, shape=[], name="lr")
         self.global_step = tf.Variable(0, trainable=False, name="global_step")
         self.global_loss = tf.Variable(1, dtype=tf.float32,trainable=False, name="global_loss")
 
@@ -80,6 +80,8 @@ class Model(object):
                 # embedding = tf.get_variable('embedding', [self.num_classes, self.embedding_size])
                 we1 = tf.nn.embedding_lookup(embedding, self.q1)  # 词嵌入[1,2,3] --> [[3,...,4],[0.7,...,-3],[6,...,9]],embeding[depth*embedding_size]=[[0.2,...,6],[3,...,4],[0.7,...,-3],[6,...,9],[8,...,-0.7]]，此时的输入节点个数为embedding_size
                 we2 = tf.nn.embedding_lookup(embedding, self.q2)
+                we1 = tf.nn.dropout(we1, keep_prob=self.keep_prob)
+                we2 = tf.nn.dropout(we2, keep_prob=self.keep_prob)
 
         ### ENCODER
         ### Shared layer
@@ -143,7 +145,8 @@ class Model(object):
 
             self.fc2 = z2
 
-
+        self.y_pre = tf.argmax(self.fc2, 1)
+        self.y_cos = tf.nn.softmax(logits=self.fc2)[:,-1]
 
 
     def build_loss_optimizer(self):
@@ -152,26 +155,29 @@ class Model(object):
         self.losses = tf.reduce_mean(self.cross)
 
         ### Optimizer
+        if self.config.lr_decay == True:
+            self.lr = tf.train.exponential_decay(learning_rate=self.config.learning_rate, global_step=self.global_step,
+                                            decay_steps=1000, decay_rate=0.9, staircase=True)  # 每隔decay_steps步，lr=learning_rate*decay_rate, 比如global_step = n*decay_steps, lr = lr=learning_rate*(decay_rate)^n
+        else:
+            self.lr = tf.constant(self.config.learning_rate)
         with tf.variable_scope("train_step") as scope:
             if self.config.op_method == "adam":
-                optimizer = tf.train.AdamOptimizer(self.config.learning_rate)
+                optimizer = tf.train.AdamOptimizer(self.lr)
             elif self.config.op_method == "sgd":
-                optimizer = tf.train.GradientDescentOptimizer(self.config.learning_rate)
+                optimizer = tf.train.GradientDescentOptimizer(self.lr)
             self.opt = optimizer.minimize(self.losses, global_step=self.global_step)
 
         ### Evaluation
-        self.y_pre = tf.argmax(self.fc2, 1)
-        self.y_cos = tf.nn.softmax(logits=self.fc2)[:,-1]
         # correct_prediction_inf = tf.equal(tf.argmax(self.fc2, 1), self.y)
         # self.accuracy_inf = tf.reduce_mean(tf.cast(correct_prediction_inf, tf.float32))
         #
 
-    def train(self, batch_generator, max_steps, save_path, save_every_n, log_every_n, val_g):
+    def train(self, batch_train_g, max_steps, save_path, save_every_n, log_every_n, val_g):
 
         with self.session as sess:
             # Train network
             # new_state = sess.run(self.initial_state)
-            for q, q_len, r, r_len, y in batch_generator:
+            for q, q_len, r, r_len, y in batch_train_g:
 
                 start = time.time()
                 feed = {self.q1: q,
@@ -180,14 +186,15 @@ class Model(object):
                         self.l2: r_len,
                         self.y: y,
                         self.keep_prob: self.config.train_keep_prob}
-                batch_loss, _,y_pre, y_cos = sess.run([self.losses, self.opt,self.y_pre, self.y_cos], feed_dict=feed)
+                batch_loss, _,fc2,y_cos,lr = sess.run([self.losses, self.opt,self.fc2, self.y_cos,self.lr ], feed_dict=feed)
                 end = time.time()
 
                 # control the print lines
                 if self.global_step.eval() % log_every_n == 0:
                     print('step: {}/{}... '.format(self.global_step.eval(), max_steps),
                           'loss: {:.4f}... '.format(batch_loss),
-                          '{:.4f} sec/batch'.format((end - start)))
+                          '{:.4f} sec/batch'.format((end - start)),
+                          'lr:{}'.format(lr))
 
                 if (self.global_step.eval() % save_every_n == 0):
                     # self.saver.save(sess, os.path.join(save_path, 'model'), global_step=self.global_step)
@@ -200,22 +207,18 @@ class Model(object):
                             self.y: y,
                             self.keep_prob: 1}
                     batch_loss,  y_pre, y_cos = sess.run([self.losses,  self.y_pre, self.y_cos], feed_dict=feed)
-                    print(y[:30])
-                    print(y_pre[:30])
-                    print(y_cos[:10])
-                    if len(y) == len(y_pre):
-                        # 计算预测准确率（百分比）
-                        print("Predictions have an accuracy of {:.2f}%.".format((y == np.array(y_pre)).mean() * 100))
-                    else:
-                        print("Number of predictions does not match number of outcomes!")
 
+                    # 计算预测准确率
                     from sklearn.metrics import log_loss
                     y_cos[y_cos == 1] = 0.999999
                     logloss = log_loss(y, y_cos, eps=1e-15)
-                    print('logloss:',logloss)
+                    print('logloss:{:.4f}...'.format(logloss),
+                          'best:{:.4f}'.format(self.global_loss.eval()),
+                          "accuracy:{:.2f}%.".format((y == np.array(y_pre)).mean() * 100))
 
                     if logloss < self.global_loss.eval():
-                        update = tf.assign(self.global_loss, logloss)
+                        print('save best model...')
+                        update = tf.assign(self.global_loss, logloss)  # 更新最优值
                         sess.run(update)
                         self.saver.save(sess, os.path.join(save_path, 'model'), global_step=self.global_step)
 
@@ -237,8 +240,7 @@ class Model(object):
                     self.keep_prob: 1}
             y_pre,y_cos = sess.run([self.y_pre, self.y_cos], feed_dict=feed)
 
-            print(y_pre[:30])
-            print(y_cos[:30])
+
 
             def make_submission(predict_prob):
                 with open(model_path+'/submission.csv', 'a+') as file:
