@@ -23,10 +23,10 @@ def parseArgs(args):
     test_args.add_argument('--learning_rate', type=float, default=0.001,help='learning_rate')
     test_args.add_argument('--train_keep_prob', type=float, default=0.7,help='dropout rate during training')
     test_args.add_argument('--max_steps', type=int, default=100000,help='max steps to train')
-    test_args.add_argument('--save_every_n', type=int, default=1000,help='save the model every n steps')
-    test_args.add_argument('--log_every_n', type=int, default=100,help='log to the screen every n steps')
+    test_args.add_argument('--save_every_n', type=int, default=100,help='save the model every n steps')
+    test_args.add_argument('--log_every_n', type=int, default=20,help='log to the screen every n steps')
     test_args.add_argument('--fc_activation', type=str, default='sigmoid', help='funciton of activated')
-    test_args.add_argument('--feats', type=str, default='all', help='features of query')
+    test_args.add_argument('--feats', type=str, default='raw', help='features of query')
     test_args.add_argument('--batch_norm', type=bool, default=False, help='standardization')
     test_args.add_argument('--op_method', type=str, default='adam', help='method of optimizer')
     test_args.add_argument('--checkpoint_path', type=str, default='models/thoth3/', help='checkpoint path')
@@ -39,7 +39,7 @@ def parseArgs(args):
 
 
 ## thoth 问答
-args_in = '--file_name hd300all_thoth3 ' \
+args_in = '--file_name hd300raw_thoth3 ' \
           '--num_steps 20 ' \
           '--batch_size 64 ' \
           '--learning_rate 0.001 ' \
@@ -91,7 +91,7 @@ def main(_):
     train_g = batch_generator(train_samples, FLAGS.batch_size)
 
     val_samples = converter.load_obj(os.path.join(save_path, val_pkl))
-    val_g = val_samples_generator(val_samples[:5000])
+    val_g = val_samples_generator(val_samples)
 
 
     print('use embeding:',FLAGS.use_embedding)

@@ -13,24 +13,31 @@ def samples_clearn(samples):
     return cl_samples
 
 def val_samples_generator(samples):
-    batch_q = []
-    batch_q_len = []
-    batch_r = []
-    batch_r_len = []
-    batch_y = []
-    for sample in samples:
-        batch_q.append(sample[0])
-        batch_q_len.append(sample[1])
-        batch_r.append(sample[2])
-        batch_r_len.append(sample[3])
-        batch_y.append(sample[4])
+    val_g = []
+    n = len(samples)
+    batchsize = 5000
+    for i in range(0,n,batchsize):
+        batch_samples = samples[i:i + batchsize]
+        batch_q = []
+        batch_q_len = []
+        batch_r = []
+        batch_r_len = []
+        batch_y = []
+        for sample in batch_samples:
+            batch_q.append(sample[0])
+            batch_q_len.append(sample[1])
+            batch_r.append(sample[2])
+            batch_r_len.append(sample[3])
+            batch_y.append(sample[4])
 
-    batch_q = np.array(batch_q)
-    batch_q_len = np.array(batch_q_len)
-    batch_r = np.array(batch_r)
-    batch_r_len = np.array(batch_r_len)
-    batch_y = np.array(batch_y)
-    return batch_q,batch_q_len,batch_r,batch_r_len,batch_y
+        batch_q = np.array(batch_q)
+        batch_q_len = np.array(batch_q_len)
+        batch_r = np.array(batch_r)
+        batch_r_len = np.array(batch_r_len)
+        batch_y = np.array(batch_y)
+        val_g.append( (batch_q,batch_q_len,batch_r,batch_r_len,batch_y))
+    return val_g
+
 
 def test_samples_generator(samples):
     batch_q = []

@@ -205,22 +205,29 @@ class Model(object):
                           'lr:{}'.format(lr))
 
                 if (self.global_step.eval() % save_every_n == 0):
-                    q, q_len, r, r_len, y = val_g
-                    feed = {self.q1: q,
-                            self.l1: q_len,
-                            self.q2: r,
-                            self.l2: r_len,
-                            self.y: y,
-                            self.keep_prob: 1}
-                    batch_loss,  y_pre, y_cos = sess.run([self.losses,  self.y_pre, self.y_cos], feed_dict=feed)
-
+                    # self.saver.save(sess, os.path.join(save_path, 'model'), global_step=self.global_step)
+                    y_pres = np.array([])
+                    y_coss = np.array([])
+                    y_s = np.array([])
+                    for q, q_len, r, r_len, y in val_g:
+                        feed = {self.q1: q,
+                                self.l1: q_len,
+                                self.q2: r,
+                                self.l2: r_len,
+                                self.y: y,
+                                self.keep_prob: 1}
+                        y_pre, y_cos = sess.run([self.y_pre, self.y_cos], feed_dict=feed)
+                        y_pres = np.append(y_pres, y_pre)
+                        y_coss = np.append(y_coss, y_cos)
+                        y_s = np.append(y_s, y)
                     # 计算预测准确率
                     from sklearn.metrics import log_loss
-                    y_cos[y_cos == 1] = 0.999999
-                    logloss = log_loss(y, y_cos, eps=1e-15)
+                    y_coss[y_coss == 1] = 0.999999
+                    logloss = log_loss(y_s, y_coss, eps=1e-15)
+                    print('val lens:',len(y_s))
                     print('logloss:{:.4f}...'.format(logloss),
                           'best:{:.4f}'.format(self.global_loss.eval()),
-                          "accuracy:{:.2f}%.".format((y == np.array(y_pre)).mean() * 100))
+                          "accuracy:{:.2f}%.".format((y_s == y_pres).mean() * 100))
 
                     if logloss < self.global_loss.eval():
                         print('save best model...')
