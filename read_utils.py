@@ -15,7 +15,7 @@ def samples_clearn(samples):
 def val_samples_generator(samples):
     val_g = []
     n = len(samples)
-    batchsize = 5000
+    batchsize = 4000
     for i in range(0,n,batchsize):
         batch_samples = samples[i:i + batchsize]
         batch_q = []
@@ -235,7 +235,7 @@ class TextConverter():
 
 
 if __name__=="__main__":
-    pro_data = TextConverter('data','process_data',20)
+    pro_data = TextConverter('word','data','process_data1',26)
 
     print(pro_data.PAD_INT)
 

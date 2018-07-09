@@ -26,7 +26,7 @@ def parseArgs(args):
     test_args.add_argument('--save_every_n', type=int, default=100,help='save the model every n steps')
     test_args.add_argument('--log_every_n', type=int, default=20,help='log to the screen every n steps')
     test_args.add_argument('--fc_activation', type=str, default='sigmoid', help='funciton of activated')
-    test_args.add_argument('--feats', type=str, default='raw', help='features of query')
+    test_args.add_argument('--feats', type=str, default='all', help='features of query')
     test_args.add_argument('--batch_norm', type=bool, default=False, help='standardization')
     test_args.add_argument('--op_method', type=str, default='adam', help='method of optimizer')
     test_args.add_argument('--checkpoint_path', type=str, default='models/thoth3/', help='checkpoint path')
@@ -39,12 +39,12 @@ def parseArgs(args):
 
 
 ## thoth 问答
-args_in = '--file_name hd300raw_thoth3 ' \
-          '--num_steps 20 ' \
-          '--batch_size 64 ' \
+args_in = '--file_name hd300b200n26_thoth3 ' \
+          '--num_steps 26 ' \
+          '--batch_size 200 ' \
           '--learning_rate 0.001 ' \
           '--use_embedding Ture ' \
-          '--hidden_size 300 ' \
+          '--hidden_size 400 ' \
           '--fc_activation sigmoid ' \
           '--op_method adam ' \
           '--max_steps 200000'.split()
@@ -75,7 +75,7 @@ def main(_):
     else:
         from model1 import Model
 
-    data_path,save_path = 'data','process_data'
+    data_path,save_path = 'data','process_data1'
 
     converter = TextConverter(word_char, data_path, save_path,  FLAGS.num_steps)
     embeddings = converter.embeddings

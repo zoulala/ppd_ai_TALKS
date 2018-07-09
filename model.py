@@ -7,7 +7,7 @@ import os
 
 
 class Model(object):
-    '''seg_word ---> bilstm --> state.h-->  h*w+b --> h*w+b -->([0,1])
+    '''seg_word ---> bilstm --> state.h-->  cos -->([0,1])
     restult: 0.530765
     '''
 

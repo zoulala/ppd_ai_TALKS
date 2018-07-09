@@ -52,11 +52,11 @@ def parseArgs(args):
     return parser.parse_args(args)
 
 ## thoth
-args_in = '--file_name hd300_thoth3 ' \
+args_in = '--file_name hd300b200_thoth3 ' \
           '--num_steps 20 ' \
-          '--batch_size 64 ' \
+          '--batch_size 200 ' \
           '--use_embedding Ture ' \
-          '--hidden_size 300 ' \
+          '--hidden_size 400 ' \
           '--fc_activation sigmoid '.split()
 
 
