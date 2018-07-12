@@ -52,8 +52,8 @@ def parseArgs(args):
     return parser.parse_args(args)
 
 ## thoth
-args_in = '--file_name hd300b200_thoth3 ' \
-          '--num_steps 20 ' \
+args_in = '--file_name hd300b200n26_thoth4 ' \
+          '--num_steps 30 ' \
           '--batch_size 200 ' \
           '--use_embedding Ture ' \
           '--hidden_size 400 ' \
@@ -86,7 +86,7 @@ def main(_):
     else:
         from model1 import Model
 
-    data_path, save_path = 'data', 'process_data'
+    data_path, save_path = 'data', 'process_data1'
 
     converter = TextConverter(word_char,data_path, save_path, FLAGS.num_steps)
     embeddings = converter.embeddings

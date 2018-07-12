@@ -39,8 +39,8 @@ def parseArgs(args):
 
 
 ## thoth 问答
-args_in = '--file_name hd300b200n26_thoth3 ' \
-          '--num_steps 26 ' \
+args_in = '--file_name hd300b200n26_thoth4 ' \
+          '--num_steps 30 ' \
           '--batch_size 200 ' \
           '--learning_rate 0.001 ' \
           '--use_embedding Ture ' \

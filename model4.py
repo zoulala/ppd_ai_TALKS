@@ -92,7 +92,82 @@ class Model(object):
             lstm2, state2 = self.bilstm(we2, self.l2)
             scope.reuse_variables()
 
+        def mask_fn(x):
+            return tf.sign(tf.reduce_sum(x, -1))
 
+        def attn_pool(x, proj, alpha, masks):
+            x = proj(x)
+            align = tf.reduce_sum(alpha * tf.tanh(x), axis=-1)
+            # masking
+            paddings = tf.fill(tf.shape(align), float('-inf'))
+            align = tf.where(tf.equal(masks, 0), paddings, align)
+            # probability
+            align = tf.expand_dims(tf.nn.softmax(align), -1)
+            # weighted sum
+            x = tf.squeeze(tf.matmul(x, align, transpose_a=True), -1)
+            return x
+
+        def query_context_attn(query, context, v, w_k, w_v, masks):
+            query = tf.expand_dims(query, 1)
+            keys = w_k(context)
+            values = w_v(context)
+
+            align = v * tf.tanh(query + keys)
+            align = tf.reduce_sum(align, 2)
+
+            paddings = tf.fill(tf.shape(align), float('-inf'))
+            align = tf.where(tf.equal(masks, 0), paddings, align)
+
+            align = tf.nn.softmax(align)
+            align = tf.expand_dims(align, -1)
+            val = tf.squeeze(tf.matmul(values, align, transpose_a=True), -1)
+            return val
+
+        mask1 = mask_fn(we1)
+        mask2 = mask_fn(we2)
+        with tf.variable_scope('attention_pooling'):
+            proj = tf.layers.Dense(self.config.hidden_size)
+            alpha = tf.get_variable('alpha', [self.config.hidden_size])
+            attn_pool_1 = attn_pool(lstm1, proj, alpha, mask1)
+            attn_pool_2 = attn_pool(lstm2, proj, alpha, mask2)
+
+        with tf.variable_scope('query_context_attention'):
+            v = tf.get_variable('v', [self.config.hidden_size])
+            proj_k = tf.layers.Dense(self.config.hidden_size)
+            proj_v = tf.layers.Dense(self.config.hidden_size)
+            query_context_attn_1 = query_context_attn(attn_pool_1, lstm2, v, proj_k, proj_v, mask2)
+            query_context_attn_2 = query_context_attn(attn_pool_2, lstm1, v, proj_k, proj_v, mask1)
+
+        with tf.variable_scope('aggregation'):
+            feat1 = attn_pool_1
+            feat2 = attn_pool_2
+            feat3 = tf.abs(feat1 - feat2)
+            feat4 = feat1 * feat2
+            feat5 = query_context_attn_1
+            feat6 = query_context_attn_2
+            feat7 = tf.abs(query_context_attn_1 - query_context_attn_2)
+            feat8 = query_context_attn_1 * query_context_attn_2
+            m1 = tf.reduce_max(we1, 1)
+            m2 = tf.reduce_max(we2, 1)
+            feat9 = tf.abs(m1 - m2)
+            feat10 = m1 * m2
+
+            x = tf.concat([feat1,
+                           feat2,
+                           feat3,
+                           feat4,
+                           feat5,
+                           feat6,
+                           feat7,
+                           feat8,
+                           feat9,
+                           feat10], -1)
+            x = tf.layers.dropout(x, 0.5, training=True)
+            x = tf.layers.dense(x, 100, tf.nn.elu)
+            x = tf.layers.dropout(x, 0.2, training=True)
+            x = tf.layers.dense(x, 20, tf.nn.elu)
+
+            self.x = tf.squeeze(tf.layers.dense(x, 1), -1)
         ### Features
         state1_fw = state1[0]
         state1_bw = state1[1]
@@ -248,7 +323,7 @@ class Model(object):
                     self.q2: r,
                     self.l2: r_len,
                     self.keep_prob: 1}
-            y_pre, y_cos = sess.run([self.y_pre, self.y_cos], feed_dict=feed)
+            y_pre, y_cos = sess.run([self.y_pre, self.y_cos,], feed_dict=feed)
 
 
             def make_submission(predict_prob):
